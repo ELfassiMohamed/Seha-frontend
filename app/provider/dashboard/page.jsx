@@ -6,26 +6,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { mockRequests, mockUsers } from "@/lib/mock-data"
-import { Users, FileText, CheckCircle, Award, AlertCircle } from "lucide-react"
+import { Users, FileText, CheckCircle, Award, AlertCircle, Loader2 } from "lucide-react"
 
 export default function ProviderDashboard() {
   const { lang, setLang, t } = useLanguage()
   const [user, setUser] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    const userData = sessionStorage.getItem("user")
-    if (!userData) {
+    // Changed from sessionStorage to localStorage
+    const userData = localStorage.getItem("user")
+    const token = localStorage.getItem("token")
+    
+    if (!userData || !token) {
       router.push("/auth/provider")
       return
     }
+    
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.role !== "provider") {
+    
+    // Check for both "PROVIDER" (from backend) and "provider" (legacy)
+    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
       router.push("/")
       return
     }
+    
     setUser(parsedUser)
+    setIsLoading(false)
   }, [router])
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   if (!user) return null
 
@@ -69,54 +86,64 @@ export default function ProviderDashboard() {
           {/* Header */}
           <div>
             <h1 className="text-3xl font-bold text-balance">
-              {t.welcomeBack}, {t.dr} {user.profile?.lastName || t.provider}
+              {t.welcomeBack || "Welcome back"}, {t.dr || "Dr."} {user.profile?.lastName || user.email?.split('@')[0] || t.provider || "Provider"}
             </h1>
-            <p className="text-muted-foreground">{t.managePatients}</p>
+            <p className="text-muted-foreground">{t.managePatients || "Manage your patients and requests"}</p>
           </div>
 
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{t.assignedPatients}</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t.assignedPatients || "Assigned Patients"}
+                </CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{assignedPatients.length}</div>
-                <p className="text-xs text-muted-foreground mt-1">{t.ofTotalPatients.replace("{total}", allPatients.length)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t.ofTotalPatients?.replace("{total}", allPatients.length) || `of ${allPatients.length} total`}
+                </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{t.pendingRequests}</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t.pendingRequests || "Pending Requests"}
+                </CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{pendingRequests.length}</div>
-                <p className="text-xs text-muted-foreground mt-1">{t.awaitingResponse}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t.awaitingResponse || "Awaiting response"}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{t.processedRequests}</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t.processedRequests || "Processed Requests"}
+                </CardTitle>
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{processedRequests.length}</div>
-                <p className="text-xs text-muted-foreground mt-1">{t.completedThisMonth}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t.completedThisMonth || "Completed this month"}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{t.issuedCertificates}</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t.issuedCertificates || "Issued Certificates"}
+                </CardTitle>
                 <Award className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">1</div>
-                <p className="text-xs text-muted-foreground mt-1">{t.certificatesIssued}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t.certificatesIssued || "Certificates issued"}</p>
               </CardContent>
             </Card>
           </div>
@@ -126,14 +153,14 @@ export default function ProviderDashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-orange-600" />
-                <CardTitle>{t.urgentRequests}</CardTitle>
+                <CardTitle>{t.urgentRequests || "Urgent Requests"}</CardTitle>
               </div>
-              <CardDescription>{t.highPriorityRequests}</CardDescription>
+              <CardDescription>{t.highPriorityRequests || "High priority requests requiring attention"}</CardDescription>
             </CardHeader>
             <CardContent>
               {urgentRequests.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">{t.noUrgentRequests}</p>
+                  <p className="text-muted-foreground">{t.noUrgentRequests || "No urgent requests at the moment"}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -161,8 +188,8 @@ export default function ProviderDashboard() {
           {/* New Patients */}
           <Card>
             <CardHeader>
-              <CardTitle>{t.newPatients}</CardTitle>
-              <CardDescription>{t.recentlyRegistered}</CardDescription>
+              <CardTitle>{t.newPatients || "New Patients"}</CardTitle>
+              <CardDescription>{t.recentlyRegistered || "Recently registered patients"}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">

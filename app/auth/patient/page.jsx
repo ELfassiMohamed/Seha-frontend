@@ -10,17 +10,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LanguageSelector } from "@/components/language-selector"
 import { Logo } from "@/components/logo"
 import { useLanguage } from "@/contexts/LanguageContext"
-import { authenticateUser, registerPatient } from "@/lib/mock-data"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft } from "lucide-react"
+
+const API_BASE_URL = "http://localhost:8081/api/auth"
 
 export default function PatientAuthPage() {
   const { lang, setLang, t, mounted } = useLanguage()
   const [isLoading, setIsLoading] = useState(false)
+  const [loginEmail, setLoginEmail] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
+  const [registerEmail, setRegisterEmail] = useState("")
+  const [registerPassword, setRegisterPassword] = useState("")
   const router = useRouter()
   const { toast } = useToast()
 
-  // Attendre que le contexte soit monté pour éviter les problèmes de SSR
   if (!mounted) {
     return null
   }
@@ -29,53 +33,109 @@ export default function PatientAuthPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    const formData = new FormData(e.target)
-    const email = formData.get("email")
-    const password = formData.get("password")
+    try {
+      const response = await fetch(`${API_BASE_URL}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          email: loginEmail, 
+          password: loginPassword 
+        }),
+      })
 
-    const user = authenticateUser(email, password)
+      const data = await response.json()
 
-    setTimeout(() => {
-      if (user && user.role === "patient") {
-        // Store user in session (in real app, use proper session management)
-        sessionStorage.setItem("user", JSON.stringify(user))
+      if (response.ok) {
+        // Store authentication data
+        localStorage.setItem("token", data.token)
+        localStorage.setItem("user", JSON.stringify({
+          email: data.email,
+          role: data.role,
+          accountStatus: data.accountStatus,
+          canAccessMedicalHistory: data.canAccessMedicalHistory
+        }))
 
-        // Check if profile is complete
-        if (!user.profile.profileComplete) {
-          router.push("/patient/profile?complete=true")
-        } else {
-          router.push("/patient/dashboard")
-        }
+        toast({
+          title: t.success || "Success",
+          description: t.loginSuccess || "Login successful",
+        })
+
+        // Redirect to dashboard
+        router.push("/patient/dashboard")
       } else {
         toast({
-          title: t.error,
-          description: t.invalidCredentials,
+          title: t.error || "Error",
+          description: data.message || t.invalidCredentials || "Invalid credentials",
           variant: "destructive",
         })
       }
+    } catch (error) {
+      console.error("Login error:", error)
+      toast({
+        title: t.error || "Error",
+        description: t.connectionError || "Connection error. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-    }, 800)
+    }
   }
 
   const handleRegister = async (e) => {
     e.preventDefault()
     setIsLoading(true)
 
-    const formData = new FormData(e.target)
-    const email = formData.get("email")
-    const password = formData.get("password")
-
-    const newUser = registerPatient(email, password)
-
-    setTimeout(() => {
-      sessionStorage.setItem("user", JSON.stringify(newUser))
-      toast({
-        title: t.success,
-        description: t.accountCreated,
+    try {
+      const response = await fetch(`${API_BASE_URL}/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          email: registerEmail, 
+          password: registerPassword 
+        }),
       })
-      router.push("/patient/profile?complete=true")
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Store authentication data
+        localStorage.setItem("token", data.token)
+        localStorage.setItem("user", JSON.stringify({
+          email: data.email,
+          role: data.role,
+          accountStatus: data.accountStatus,
+          canAccessMedicalHistory: data.canAccessMedicalHistory,
+          isNewUser: true // Flag to indicate this is a new registration
+        }))
+
+        toast({
+          title: t.success || "Success",
+          description: data.message || t.accountCreated || "Account created successfully",
+        })
+
+        // Redirect to profile completion page
+        router.push("/patient/profile?complete=true")
+      } else {
+        toast({
+          title: t.error || "Error",
+          description: data.message || t.registrationFailed || "Registration failed",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Registration error:", error)
+      toast({
+        title: t.error || "Error",
+        description: t.connectionError || "Connection error. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -89,7 +149,7 @@ export default function PatientAuthPage() {
           <Link href="/">
             <Button variant="ghost" className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              {t.back}
+              {t.back || "Back"}
             </Button>
           </Link>
           <LanguageSelector />
@@ -106,57 +166,87 @@ export default function PatientAuthPage() {
             <Tabs defaultValue="login" className="w-full">
               <CardHeader>
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="login">{t.login}</TabsTrigger>
-                  <TabsTrigger value="register">{t.register}</TabsTrigger>
+                  <TabsTrigger value="login">{t.login || "Login"}</TabsTrigger>
+                  <TabsTrigger value="register">{t.register || "Register"}</TabsTrigger>
                 </TabsList>
-                <CardTitle className="text-2xl">{t.patientLogin}</CardTitle>
-                <CardDescription>{t.enterCredentials}</CardDescription>
+                <CardTitle className="text-2xl">{t.patientLogin || "Patient Portal"}</CardTitle>
+                <CardDescription>{t.enterCredentials || "Enter your credentials"}</CardDescription>
               </CardHeader>
 
               <TabsContent value="login">
-                <form onSubmit={handleLogin}>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="login-email">{t.email}</Label>
-                      <Input id="login-email" name="email" type="email" placeholder="patient@sehamaroc.com" required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="login-password">{t.password}</Label>
-                      <Input id="login-password" name="password" type="password" required />
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
-                      {isLoading ? t.loading : t.login}
-                    </Button>
-                  </CardFooter>
-                </form>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">{t.email || "Email"}</Label>
+                    <Input 
+                      id="login-email" 
+                      type="email" 
+                      placeholder="patient@email.com" 
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      required 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">{t.password || "Password"}</Label>
+                    <Input 
+                      id="login-password" 
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      required 
+                    />
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Button 
+                    onClick={handleLogin}
+                    className="w-full bg-primary hover:bg-primary/90" 
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (t.loading || "Loading...") : (t.login || "Login")}
+                  </Button>
+                </CardFooter>
               </TabsContent>
 
               <TabsContent value="register">
-                <form onSubmit={handleRegister}>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="register-email">{t.email}</Label>
-                      <Input id="register-email" name="email" type="email" placeholder="you@example.com" required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="register-password">{t.password}</Label>
-                      <Input id="register-password" name="password" type="password" required />
-                    </div>
-                    <p className="text-sm text-muted-foreground">{t.completeProfileAfter}</p>
-                  </CardContent>
-                  <CardFooter>
-                    <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
-                      {isLoading ? t.loading : t.register}
-                    </Button>
-                  </CardFooter>
-                </form>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="register-email">{t.email || "Email"}</Label>
+                    <Input 
+                      id="register-email" 
+                      type="email" 
+                      placeholder="you@example.com"
+                      value={registerEmail}
+                      onChange={(e) => setRegisterEmail(e.target.value)}
+                      required 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-password">{t.password || "Password"}</Label>
+                    <Input 
+                      id="register-password" 
+                      type="password"
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      required 
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {t.completeProfileAfter || "You can complete your profile after registration"}
+                  </p>
+                </CardContent>
+                <CardFooter>
+                  <Button 
+                    onClick={handleRegister}
+                    className="w-full bg-primary hover:bg-primary/90" 
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (t.loading || "Loading...") : (t.register || "Register")}
+                  </Button>
+                </CardFooter>
               </TabsContent>
             </Tabs>
           </Card>
-
-          <p className="mt-4 text-sm text-muted-foreground">{t.demoCredentialsPatient}</p>
         </div>
       </div>
     </div>

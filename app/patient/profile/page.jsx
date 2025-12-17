@@ -11,12 +11,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
-import { AlertCircle, X } from "lucide-react"
+import { AlertCircle, X, Loader2 } from "lucide-react"
+
+const API_BASE_URL = "http://localhost:8081/api/patient"
 
 export default function PatientProfile() {
   const { lang, setLang, t } = useLanguage()
   const [user, setUser] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [profile, setProfile] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [allergies, setAllergies] = useState([])
   const [chronicDiseases, setChronicDiseases] = useState([])
   const [newAllergy, setNewAllergy] = useState("")
@@ -28,28 +32,71 @@ export default function PatientProfile() {
   const shouldComplete = searchParams.get("complete") === "true"
 
   useEffect(() => {
-    const userData = sessionStorage.getItem("user")
-    if (!userData) {
+    const userData = localStorage.getItem("user")
+    const token = localStorage.getItem("token")
+    
+    if (!userData || !token) {
       router.push("/auth/patient")
       return
     }
+    
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.role !== "patient") {
+    
+    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
       router.push("/")
       return
     }
+    
     setUser(parsedUser)
-    setAllergies(parsedUser.profile.allergies || [])
-    setChronicDiseases(parsedUser.profile.chronicDiseases || [])
+    fetchProfile()
   }, [router])
+
+  const fetchProfile = async () => {
+    setIsLoading(true)
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(`${API_BASE_URL}/profile`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setProfile(data)
+        setAllergies(data.allergies || [])
+        setChronicDiseases(data.chronicDiseases || [])
+      } else if (response.status === 401) {
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
+        router.push("/auth/patient")
+      } else {
+        toast({
+          title: t.error || "Error",
+          description: t.failedToLoadProfile || "Failed to load profile",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Profile fetch error:", error)
+      toast({
+        title: t.error || "Error",
+        description: t.connectionError || "Connection error. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setIsLoading(true)
+    setIsSaving(true)
 
     const formData = new FormData(e.target)
-    const updatedProfile = {
-      ...user.profile,
+    const profileData = {
       firstName: formData.get("firstName"),
       lastName: formData.get("lastName"),
       phone: formData.get("phone"),
@@ -57,27 +104,55 @@ export default function PatientProfile() {
       gender: formData.get("gender"),
       address: formData.get("address"),
       city: formData.get("city"),
-      bloodType: formData.get("bloodType"),
-      emergencyContact: formData.get("emergencyContact"),
+      state: formData.get("state") || null,
+      zipCode: formData.get("zipCode") || null,
+      country: formData.get("country") || "Morocco",
+      bloodType: formData.get("bloodType") || null,
+      emergencyContact: formData.get("emergencyContact") || null,
       allergies,
       chronicDiseases,
-      profileComplete: true,
-      status: "active",
     }
 
-    setTimeout(() => {
-      const updatedUser = { ...user, profile: updatedProfile }
-      sessionStorage.setItem("user", JSON.stringify(updatedUser))
-      setUser(updatedUser)
-      toast({
-        title: t.success,
-        description: t.profileUpdated,
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(`${API_BASE_URL}/complete-profile`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(profileData),
       })
-      setIsLoading(false)
-      if (shouldComplete) {
-        router.push("/patient/dashboard")
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setProfile(data)
+        toast({
+          title: t.success || "Success",
+          description: t.profileUpdated || "Profile updated successfully",
+        })
+        
+        if (shouldComplete) {
+          router.push("/patient/dashboard")
+        }
+      } else {
+        toast({
+          title: t.error || "Error",
+          description: data.message || t.failedToUpdateProfile || "Failed to update profile",
+          variant: "destructive",
+        })
       }
-    }, 800)
+    } catch (error) {
+      console.error("Profile update error:", error)
+      toast({
+        title: t.error || "Error",
+        description: t.connectionError || "Connection error. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const addAllergy = () => {
@@ -102,7 +177,17 @@ export default function PatientProfile() {
     setChronicDiseases(chronicDiseases.filter((d) => d !== disease))
   }
 
-  if (!user) return null
+  if (!user || isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!profile) return null
+
+  const isProfileComplete = profile.firstName && profile.lastName && profile.phone && profile.dateOfBirth
 
   return (
     <div className="flex min-h-screen" dir={lang === "ar" ? "rtl" : "ltr"}>
@@ -112,16 +197,35 @@ export default function PatientProfile() {
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Header */}
           <div>
-            <h1 className="text-3xl font-bold text-balance">{t.myProfile}</h1>
-            <p className="text-muted-foreground">{t.personalInformation}</p>
+            <h1 className="text-3xl font-bold text-balance">{t.myProfile || "My Profile"}</h1>
+            <p className="text-muted-foreground">{t.personalInformation || "Manage your personal information"}</p>
           </div>
 
+          {/* Account Status */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{t.accountStatus || "Account Status"}</p>
+                  <p className="text-lg font-semibold">{profile.email}</p>
+                </div>
+                <Badge variant={profile.accountStatus === "ACTIVE" ? "active" : "pending"}>
+                  {profile.accountStatus}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Incomplete Profile Alert */}
-          {!user.profile.profileComplete && (
+          {!isProfileComplete && (
             <Alert className="border-2 border-primary/50 bg-primary/5">
               <AlertCircle className="h-5 w-5 text-primary" />
-              <AlertTitle className="text-lg font-semibold">{t.completeProfile}</AlertTitle>
-              <AlertDescription>{t.completeProfileMessage}</AlertDescription>
+              <AlertTitle className="text-lg font-semibold">
+                {t.completeProfile || "Complete Your Profile"}
+              </AlertTitle>
+              <AlertDescription>
+                {t.completeProfileMessage || "Please fill in all required fields to complete your profile"}
+              </AlertDescription>
             </Alert>
           )}
 
@@ -129,40 +233,52 @@ export default function PatientProfile() {
           <form onSubmit={handleSubmit}>
             <Card>
               <CardHeader>
-                <CardTitle>{t.personalInformation}</CardTitle>
-                <CardDescription>{t.personalInformation}</CardDescription>
+                <CardTitle>{t.personalInformation || "Personal Information"}</CardTitle>
+                <CardDescription>
+                  {t.updatePersonalInfo || "Update your personal information"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">{t.firstName}</Label>
-                    <Input id="firstName" name="firstName" defaultValue={user.profile.firstName} required />
+                    <Label htmlFor="firstName">{t.firstName || "First Name"} *</Label>
+                    <Input 
+                      id="firstName" 
+                      name="firstName" 
+                      defaultValue={profile.firstName || ""} 
+                      required 
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">{t.lastName}</Label>
-                    <Input id="lastName" name="lastName" defaultValue={user.profile.lastName} required />
+                    <Label htmlFor="lastName">{t.lastName || "Last Name"} *</Label>
+                    <Input 
+                      id="lastName" 
+                      name="lastName" 
+                      defaultValue={profile.lastName || ""} 
+                      required 
+                    />
                   </div>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="phone">{t.phone}</Label>
+                    <Label htmlFor="phone">{t.phone || "Phone"} *</Label>
                     <Input
                       id="phone"
                       name="phone"
                       type="tel"
                       placeholder="+212 6 12 34 56 78"
-                      defaultValue={user.profile.phone}
+                      defaultValue={profile.phone || ""}
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="dateOfBirth">{t.dateOfBirth}</Label>
+                    <Label htmlFor="dateOfBirth">{t.dateOfBirth || "Date of Birth"} *</Label>
                     <Input
                       id="dateOfBirth"
                       name="dateOfBirth"
                       type="date"
-                      defaultValue={user.profile.dateOfBirth}
+                      defaultValue={profile.dateOfBirth || ""}
                       required
                     />
                   </div>
@@ -170,22 +286,22 @@ export default function PatientProfile() {
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="gender">{t.gender}</Label>
-                    <Select name="gender" defaultValue={user.profile.gender || "male"}>
+                    <Label htmlFor="gender">{t.gender || "Gender"}</Label>
+                    <Select name="gender" defaultValue={profile.gender || "male"}>
                       <SelectTrigger id="gender">
-                        <SelectValue placeholder={t.gender} />
+                        <SelectValue placeholder={t.selectGender || "Select gender"} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="male">{t.male}</SelectItem>
-                        <SelectItem value="female">{t.female}</SelectItem>
+                        <SelectItem value="male">{t.male || "Male"}</SelectItem>
+                        <SelectItem value="female">{t.female || "Female"}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="bloodType">{t.bloodType}</Label>
-                    <Select name="bloodType" defaultValue={user.profile.bloodType || "A+"}>
+                    <Label htmlFor="bloodType">{t.bloodType || "Blood Type"}</Label>
+                    <Select name="bloodType" defaultValue={profile.bloodType || "A+"}>
                       <SelectTrigger id="bloodType">
-                        <SelectValue placeholder={t.selectBloodType} />
+                        <SelectValue placeholder={t.selectBloodType || "Select blood type"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="A+">A+</SelectItem>
@@ -202,30 +318,63 @@ export default function PatientProfile() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address">{t.address}</Label>
+                  <Label htmlFor="address">{t.address || "Address"}</Label>
                   <Input
                     id="address"
                     name="address"
                     placeholder="123 Rue Mohammed V"
-                    defaultValue={user.profile.address}
-                    required
+                    defaultValue={profile.address || ""}
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="city">{t.city || "City"}</Label>
+                    <Input 
+                      id="city" 
+                      name="city" 
+                      placeholder="Casablanca" 
+                      defaultValue={profile.city || ""} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="state">{t.state || "State/Region"}</Label>
+                    <Input 
+                      id="state" 
+                      name="state" 
+                      placeholder="Casablanca-Settat" 
+                      defaultValue={profile.state || ""} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="zipCode">{t.zipCode || "Zip Code"}</Label>
+                    <Input 
+                      id="zipCode" 
+                      name="zipCode" 
+                      placeholder="20000" 
+                      defaultValue={profile.zipCode || ""} 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="country">{t.country || "Country"}</Label>
+                  <Input 
+                    id="country" 
+                    name="country" 
+                    placeholder="Morocco" 
+                    defaultValue={profile.country || "Morocco"} 
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="city">{t.city}</Label>
-                  <Input id="city" name="city" placeholder="Casablanca" defaultValue={user.profile.city} required />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="emergencyContact">{t.emergencyContact}</Label>
+                  <Label htmlFor="emergencyContact">{t.emergencyContact || "Emergency Contact"}</Label>
                   <Input
                     id="emergencyContact"
                     name="emergencyContact"
                     type="tel"
                     placeholder="+212 6 98 76 54 32"
-                    defaultValue={user.profile.emergencyContact}
-                    required
+                    defaultValue={profile.emergencyContact || ""}
                   />
                 </div>
               </CardContent>
@@ -233,27 +382,29 @@ export default function PatientProfile() {
 
             <Card className="mt-6">
               <CardHeader>
-                <CardTitle>{t.medicalInformation}</CardTitle>
-                <CardDescription>{t.medicalInformation}</CardDescription>
+                <CardTitle>{t.medicalInformation || "Medical Information"}</CardTitle>
+                <CardDescription>
+                  {t.optionalMedicalInfo || "Optional: Add your medical information"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Allergies */}
                 <div className="space-y-3">
-                  <Label>{t.allergies}</Label>
+                  <Label>{t.allergies || "Allergies"}</Label>
                   <div className="flex gap-2">
                     <Input
-                      placeholder={t.enterAllergy}
+                      placeholder={t.enterAllergy || "Enter an allergy"}
                       value={newAllergy}
                       onChange={(e) => setNewAllergy(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addAllergy())}
                     />
                     <Button type="button" onClick={addAllergy} variant="outline">
-                      {t.addAllergy}
+                      {t.add || "Add"}
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {allergies.map((allergy) => (
-                      <Badge key={allergy} variant="secondary" className="gap-1 px-3 py-1">
+                    {allergies.map((allergy, index) => (
+                      <Badge key={index} variant="secondary" className="gap-1 px-3 py-1">
                         {allergy}
                         <button
                           type="button"
@@ -269,21 +420,21 @@ export default function PatientProfile() {
 
                 {/* Chronic Diseases */}
                 <div className="space-y-3">
-                  <Label>{t.chronicDiseases}</Label>
+                  <Label>{t.chronicDiseases || "Chronic Diseases"}</Label>
                   <div className="flex gap-2">
                     <Input
-                      placeholder={t.enterDisease}
+                      placeholder={t.enterDisease || "Enter a chronic disease"}
                       value={newDisease}
                       onChange={(e) => setNewDisease(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addDisease())}
                     />
                     <Button type="button" onClick={addDisease} variant="outline">
-                      {t.addDisease}
+                      {t.add || "Add"}
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {chronicDiseases.map((disease) => (
-                      <Badge key={disease} variant="secondary" className="gap-1 px-3 py-1">
+                    {chronicDiseases.map((disease, index) => (
+                      <Badge key={index} variant="secondary" className="gap-1 px-3 py-1">
                         {disease}
                         <button
                           type="button"
@@ -300,8 +451,21 @@ export default function PatientProfile() {
             </Card>
 
             <div className="flex justify-end gap-4 mt-6">
-              <Button type="submit" size="lg" className="bg-primary hover:bg-primary/90" disabled={isLoading}>
-                {isLoading ? t.loading : t.save}
+              <Button 
+                //onClick={handleSubmit}
+                type="submit"
+                size="lg" 
+                className="bg-primary hover:bg-primary/90" 
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t.saving || "Saving..."}
+                  </>
+                ) : (
+                  t.save || "Save Profile"
+                )}
               </Button>
             </div>
           </form>
