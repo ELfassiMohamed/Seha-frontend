@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Users, UserMinus, UserPlus, Loader2, CheckCircle, XCircle } from "lucide-react"
 
-const API_BASE_URL = "http://localhost:8082/api/providers/patients"
+const API_BASE_URL = "http://localhost:8080/api/providers/patients"
 
 export default function ProviderPatients() {
   const { lang, setLang, t } = useLanguage()
