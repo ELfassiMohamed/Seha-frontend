@@ -45,12 +45,16 @@ export default function PatientRequests() {
     }
     
     const parsedUser = JSON.parse(userData)
-    
+    /*
     if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
       router.push("/")
       return
     }
-    
+    */
+    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
+      router.push("/")
+      return
+    }
     setUser(parsedUser)
     fetchRequests(parsedUser)
   }, [router])
