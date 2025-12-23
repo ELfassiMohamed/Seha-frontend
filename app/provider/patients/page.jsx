@@ -207,30 +207,30 @@ export default function ProviderPatients() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json", // Crucial for @RequestBody
         },
+        // Send the payload the backend expects
+        body: JSON.stringify({ reason: "Suspended by provider" }), 
       })
-
+  
       if (response.ok) {
+        const data = await response.json() // Now this will be valid JSON
         toast({
           title: t.success || "Success",
           description: t.patientSuspendedSuccess || "Patient suspended successfully",
         })
         await fetchAllData()
       } else {
-        const data = await response.json()
+        // Handle the 400 error gracefully
+        const errorData = await response.json().catch(() => ({ message: "Server error" }))
         toast({
           title: t.error || "Error",
-          description: data.message || "Failed to suspend patient",
+          description: errorData.message || "Failed to suspend patient",
           variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Suspend error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error",
-        variant: "destructive",
-      })
     } finally {
       setActionLoading(null)
       setSuspendDialog({ open: false, patient: null })

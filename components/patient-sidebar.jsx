@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LanguageSelector } from "@/components/language-selector"
 import { Logo } from "@/components/logo"
 import { useLanguage } from "@/contexts/LanguageContext"
-import { LayoutDashboard, User, FileText, History, Bell, LogOut, Menu, X } from "lucide-react"
+import { LayoutDashboard, User, FileText, History, Bell, LogOut, Menu, X, Award } from "lucide-react"
 
 export function PatientSidebar({ user }) {
   const { lang, setLang, t } = useLanguage()
@@ -21,6 +21,7 @@ export function PatientSidebar({ user }) {
     { name: t.myProfile, href: "/patient/profile", icon: User },
     { name: t.myRequests, href: "/patient/requests", icon: FileText },
     { name: t.medicalHistory, href: "/patient/history", icon: History },
+    { name: t.myCertifications, href: "/patient/certifications", icon: Award },
     { name: t.notifications, href: "/patient/notifications", icon: Bell },
   ]
 
