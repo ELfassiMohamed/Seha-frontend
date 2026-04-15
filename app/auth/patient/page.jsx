@@ -155,20 +155,7 @@ export default function PatientAuthPage() {
         <div className="absolute inset-0 bg-primary/20 backdrop-blur-[1px]" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
         
-        {/* Branding on Image */}
-        <div className="absolute bottom-16 left-16 right-16 z-10 space-y-6">
-          <div className="inline-flex rounded-2xl bg-background/80 p-4 backdrop-blur-md">
-            <Logo size="lg" />
-          </div>
-          <div className="space-y-4">
-            <h2 className="text-4xl font-extrabold tracking-tight text-foreground drop-shadow-sm">
-              {t.patientLogin}
-            </h2>
-            <p className="max-w-md text-xl font-medium text-muted-foreground">
-              {t.manageYourHealth}
-            </p>
-          </div>
-        </div>
+
       </div>
 
       {/* Form Side */}
