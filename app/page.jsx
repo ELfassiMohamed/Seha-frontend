@@ -4,9 +4,23 @@ import Image from "next/image"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Logo } from "@/components/logo"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Heart, Shield, UserCheck, ArrowRight, Github } from "lucide-react"
+
+const LocalLogo = ({ href }) => {
+  const content = (
+    <div className="flex items-center gap-3 group">
+      <div className="relative transition-transform group-hover:scale-110">
+        <Image src="/logo-icon.svg" alt="SehAIty Logo" width={40} height={40} className="object-contain drop-shadow-md" />
+      </div>
+      <span className="font-bold tracking-tight text-xl text-primary">
+        SehAIty
+      </span>
+    </div>
+  )
+  if (href) return <Link href={href} className="inline-block">{content}</Link>
+  return content
+}
 
 export default function LandingPage() {
   const { lang, setLang, t, mounted } = useLanguage()
@@ -20,7 +34,7 @@ export default function LandingPage() {
       principlesTitle: "Core Platform Principles",
       principlesDescription: "Designed for organized, secure, and patient-centered healthcare workflows.",
       mvpNotice: "MVP - Under Active Development",
-      attribution: "Project Group - EMSI Tanger",
+      // attribution: "Project Group - EMSI Tanger",
       github: "GitHub",
     },
     fr: {
@@ -30,7 +44,7 @@ export default function LandingPage() {
       principlesTitle: "Principes Fondamentaux de la Plateforme",
       principlesDescription: "Concue pour des parcours de soins organises, securises et centres sur le patient.",
       mvpNotice: "MVP - En Developpement Actif",
-      attribution: "Groupe de Projet - EMSI Tanger",
+      // attribution: "Groupe de Projet - EMSI Tanger",
       github: "GitHub",
     },
     ar: {
@@ -40,7 +54,7 @@ export default function LandingPage() {
       principlesTitle: "المبادئ الاساسية للمنصة",
       principlesDescription: "مصممة لمسارات رعاية منظمة وامنة ومتمحورة حول المريض.",
       mvpNotice: "MVP - المنصة قيد التطوير النشط",
-      attribution: "مجموعة مشروع - EMSI Tanger",
+      // attribution: "مجموعة مشروع - EMSI Tanger",
       github: "GitHub",
     },
   }
@@ -61,7 +75,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-5">
           <div className="flex items-center justify-between gap-4">
-            <Logo size="md" />
+            <LocalLogo />
             <div className="flex items-center gap-3">
               <span className="hidden text-sm font-medium text-muted-foreground md:inline">{current.language}</span>
               <div className="inline-flex rounded-xl border bg-card p-1">
@@ -199,7 +213,7 @@ export default function LandingPage() {
                 <p className="inline-flex rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold tracking-wide text-secondary">
                   {current.mvpNotice}
                 </p>
-                <p className="text-sm text-muted-foreground">{current.attribution}</p>
+                {/* <p className="text-sm text-muted-foreground">{current.attribution}</p> */}
                 <a
                   href="https://github.com/ELfassiMohamed/Seha-frontend"
                   target="_blank"
@@ -212,7 +226,7 @@ export default function LandingPage() {
               </div>
 
               <div className={`space-y-2 ${isArabic ? "md:text-left" : "md:text-right"}`}>
-                <Logo size="md" href="/" />
+                <LocalLogo href="/" />
                 <p className="text-sm text-muted-foreground">{t.copyright}</p>
               </div>
             </div>

@@ -9,7 +9,7 @@ const geist = Geist({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "SehaMaroc - Your health, our priority",
+  title: "SehAIty - Your health, our priority",
   description: "Modern healthcare management platform",
   generator: "v0.app",
   icons: {
