@@ -1,5 +1,7 @@
 "use client"
 import Link from "next/link"
+import Image from "next/image"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Logo } from "@/components/logo"
@@ -83,35 +85,56 @@ export default function LandingPage() {
       </header>
 
       <main>
-        <section className="relative overflow-hidden px-4 py-16 md:py-24">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-accent/5 to-secondary/10" />
+        <section className="relative flex min-h-[85vh] items-center overflow-hidden px-4 py-20 md:py-32">
+          {/* Background Image with optimized Next.js Image */}
+          <div className="absolute inset-0 z-0">
+            <Image
+              src="/hero.jpg"
+              alt="Medical Care"
+              fill
+              className="object-cover object-center"
+              priority
+            />
+            {/* Dynamic gradient overlays for readability and aesthetic */}
+            <div className="absolute inset-0 bg-gradient-to-r from-background/60 via-background/20 to-transparent ltr:block rtl:hidden" />
+            <div className="absolute inset-0 bg-gradient-to-l from-background/60 via-background/20 to-transparent ltr:hidden rtl:block" />
+          </div>
+
           <div className="container relative z-10 mx-auto max-w-6xl">
-            <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
+            <div className="grid gap-12 lg:grid-cols-12 lg:items-center">
               <div className="lg:col-span-7">
-                <h1 className="text-4xl font-bold leading-tight md:text-5xl">{t.heroTitle}</h1>
-                <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">{t.heroSubtitle}</p>
+                <div className="space-y-6">
+                  <h1 className="text-4xl font-extrabold tracking-tight text-foreground lg:text-6xl drop-shadow-sm">
+                    {t.heroTitle}
+                  </h1>
+                  <p className="max-w-2xl text-lg font-medium leading-relaxed text-muted-foreground md:text-xl">
+                    {t.heroSubtitle}
+                  </p>
+                </div>
               </div>
 
-              <Card className="border-2 shadow-sm lg:col-span-5">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-2xl">{current.portalTitle}</CardTitle>
-                  <CardDescription className="text-base">{current.portalDescription}</CardDescription>
+              <Card className="border-border/40 bg-background/60 shadow-2xl backdrop-blur-xl lg:col-span-5 border-2 transition-all hover:border-primary/20">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-3xl font-bold tracking-tight">{current.portalTitle}</CardTitle>
+                  <CardDescription className="text-lg font-medium text-muted-foreground/90">
+                    {current.portalDescription}
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <Link href="/auth/patient" className="block">
-                    <Button size="lg" className="w-full justify-between bg-primary text-base hover:bg-primary/90">
+                <CardContent className="space-y-4">
+                  <Link href="/auth/patient" className="group block">
+                    <Button size="lg" className="h-14 w-full justify-between bg-primary text-lg font-semibold shadow-lg transition-all hover:scale-[1.02] active:scale-95">
                       <span>{t.imPatient}</span>
-                      <ArrowRight className={`h-5 w-5 ${isArabic ? "rotate-180" : ""}`} />
+                      <ArrowRight className={`h-6 w-6 transition-transform group-hover:translate-x-1 ${isArabic ? "rotate-180 group-hover:-translate-x-1" : ""}`} />
                     </Button>
                   </Link>
-                  <Link href="/auth/provider" className="block">
+                  <Link href="/auth/provider" className="group block">
                     <Button
                       size="lg"
                       variant="outline"
-                      className="w-full justify-between border-2 border-secondary bg-transparent text-base text-secondary hover:bg-secondary hover:text-secondary-foreground"
+                      className="h-14 w-full justify-between border-2 border-secondary/50 bg-background/50 text-lg font-semibold text-secondary shadow-sm transition-all hover:scale-[1.02] hover:bg-secondary hover:text-secondary-foreground active:scale-95"
                     >
                       <span>{t.imDoctor}</span>
-                      <ArrowRight className={`h-5 w-5 ${isArabic ? "rotate-180" : ""}`} />
+                      <ArrowRight className={`h-6 w-6 transition-transform group-hover:translate-x-1 ${isArabic ? "rotate-180 group-hover:-translate-x-1" : ""}`} />
                     </Button>
                   </Link>
                 </CardContent>
