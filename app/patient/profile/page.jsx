@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { PatientSidebar } from "@/components/patient-sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,7 +15,7 @@ import { AlertCircle, X, Loader2 } from "lucide-react"
 import { getPatientProfile, updatePatientProfile } from "@/services/api/patientService"
 import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
-export default function PatientProfile() {
+function PatientProfileContent() {
   const { lang, setLang, t } = useLanguage()
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -433,5 +433,17 @@ export default function PatientProfile() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function PatientProfile() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <PatientProfileContent />
+    </Suspense>
   )
 }

@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ProviderSidebar } from "@/components/provider-sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +14,7 @@ import { Loader2, AlertCircle, X } from "lucide-react"
 import { getProviderProfile, updateProviderProfile } from "@/services/api/providerService"
 import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
-export default function ProviderProfile() {
+function ProviderProfileContent() {
   const { lang, setLang, t } = useLanguage()
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -342,5 +342,17 @@ export default function ProviderProfile() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function ProviderProfile() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <ProviderProfileContent />
+    </Suspense>
   )
 }
