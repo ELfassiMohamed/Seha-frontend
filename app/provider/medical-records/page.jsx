@@ -30,8 +30,15 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Search, Plus, Eye, Edit, Trash2, Loader2 } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8080/api"
+import {
+  createMedicalRecord,
+  deleteMedicalRecord,
+  getAssignedPatients,
+  getMedicalRecordById,
+  getMedicalRecords,
+  updateMedicalRecord,
+} from "@/services/api/providerService"
+import { resolveProtectedUser } from "@/services/auth/guard"
 
 export default function MedicalRecordsPage() {
   const { lang, t } = useLanguage()
@@ -49,54 +56,31 @@ export default function MedicalRecordsPage() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/provider")
+    const result = resolveProtectedUser("provider")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/provider")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchData()
   }, [router])
 
   const fetchData = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      
-      // Fetch assigned patients and all records in parallel
-      const [patientsRes, recordsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/providers/patients/assigned`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/records`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ])
-
-      if (patientsRes.ok) {
-        const patientsData = await patientsRes.json()
-        setAssignedPatients(patientsData)
-      }
-
-      if (recordsRes.ok) {
-        const recordsData = await recordsRes.json()
-        setRecords(recordsData)
-      }
+      const [patientsData, recordsData] = await Promise.all([getAssignedPatients(), getMedicalRecords()])
+      setAssignedPatients(patientsData)
+      setRecords(recordsData)
     } catch (error) {
       console.error("Fetch error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Failed to load data",
+        description: error.message || t.connectionError || "Failed to load data",
         variant: "destructive",
       })
     } finally {
@@ -105,7 +89,7 @@ export default function MedicalRecordsPage() {
   }
 
   const generateRecordId = () => {
-    return 'REC-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase()
+    return "REC-" + Date.now() + "-" + Math.random().toString(36).substr(2, 6).toUpperCase()
   }
 
   const getPatientInfo = (patientId) => {
@@ -120,29 +104,16 @@ export default function MedicalRecordsPage() {
 
   const handleViewRecord = async (recordId) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/records/${recordId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      if (response.ok) {
-        const recordData = await response.json()
-        const patient = getPatientInfo(recordData.patientId)
-        setSelectedRecord(recordData)
-        setSelectedPatient(patient)
-        setModalMode("view")
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: "Failed to load record details",
-          variant: "destructive",
-        })
-      }
+      const recordData = await getMedicalRecordById(recordId)
+      const patient = getPatientInfo(recordData.patientId)
+      setSelectedRecord(recordData)
+      setSelectedPatient(patient)
+      setModalMode("view")
     } catch (error) {
       console.error("Fetch record error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     }
@@ -150,18 +121,11 @@ export default function MedicalRecordsPage() {
 
   const handleEditRecord = async (recordId) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/records/${recordId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      if (response.ok) {
-        const recordData = await response.json()
-        const patient = getPatientInfo(recordData.patientId)
-        setSelectedRecord(recordData)
-        setSelectedPatient(patient)
-        setModalMode("edit")
-      }
+      const recordData = await getMedicalRecordById(recordId)
+      const patient = getPatientInfo(recordData.patientId)
+      setSelectedRecord(recordData)
+      setSelectedPatient(patient)
+      setModalMode("edit")
     } catch (error) {
       console.error("Fetch record error:", error)
     }
@@ -169,30 +133,17 @@ export default function MedicalRecordsPage() {
 
   const handleDeleteRecord = async () => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/records/${deleteDialog.recordId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
+      await deleteMedicalRecord(deleteDialog.recordId)
+      toast({
+        title: t.success || "Success",
+        description: "Record deleted successfully",
       })
-
-      if (response.ok) {
-        toast({
-          title: t.success || "Success",
-          description: "Record deleted successfully",
-        })
-        await fetchData() // Refresh records
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: "Failed to delete record",
-          variant: "destructive",
-        })
-      }
+      await fetchData()
     } catch (error) {
       console.error("Delete error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     } finally {
@@ -206,7 +157,7 @@ export default function MedicalRecordsPage() {
 
     const formData = new FormData(e.target)
     const now = new Date().toISOString()
-    
+
     const recordData = {
       recordId: modalMode === "create" ? generateRecordId() : selectedRecord.recordId,
       patientId: selectedPatient.id,
@@ -225,59 +176,21 @@ export default function MedicalRecordsPage() {
     }
 
     try {
-      const token = localStorage.getItem("token")
-      
       if (modalMode === "create") {
-        // Create new record
-        const response = await fetch(`${API_BASE_URL}/providers/medical-records`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(recordData),
+        await createMedicalRecord(recordData)
+        toast({
+          title: t.success || "Success",
+          description: "Medical record created successfully",
         })
-
-        if (response.ok) {
-          toast({
-            title: t.success || "Success",
-            description: "Medical record created successfully",
-          })
-          await fetchData()
-        } else {
-          const error = await response.json()
-          toast({
-            title: t.error || "Error",
-            description: error.message || "Failed to create record",
-            variant: "destructive",
-          })
-        }
       } else if (modalMode === "edit") {
-        // Update existing record
-        const response = await fetch(`${API_BASE_URL}/records/${selectedRecord.recordId}`, {
-          method: "PUT",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(recordData),
+        await updateMedicalRecord(selectedRecord.recordId, recordData)
+        toast({
+          title: t.success || "Success",
+          description: "Medical record updated successfully",
         })
-
-        if (response.ok) {
-          toast({
-            title: t.success || "Success",
-            description: "Medical record updated successfully",
-          })
-          await fetchData()
-        } else {
-          toast({
-            title: t.error || "Error",
-            description: "Failed to update record",
-            variant: "destructive",
-          })
-        }
       }
 
+      await fetchData()
       setModalMode(null)
       setSelectedRecord(null)
       setSelectedPatient(null)
@@ -285,7 +198,7 @@ export default function MedicalRecordsPage() {
       console.error("Save record error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     } finally {

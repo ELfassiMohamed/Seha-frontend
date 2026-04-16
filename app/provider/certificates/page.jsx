@@ -11,9 +11,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Award, Download, Plus, Trash2, Eye, Loader2, Printer } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8080/api"
+import { Award, Plus, Eye, Loader2, Printer } from "lucide-react"
+import {
+  createCertificate,
+  getAssignedPatients,
+  getCertificateById,
+  getCertificates,
+  printCertificate,
+} from "@/services/api/providerService"
+import { clearAuthSession } from "@/services/auth/storage"
+import { resolveProtectedUser } from "@/services/auth/guard"
 
 export default function ProviderCertificates() {
   const [user, setUser] = useState(null)
@@ -42,22 +49,18 @@ export default function ProviderCertificates() {
   })
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/provider")
+    const result = resolveProtectedUser("provider")
+
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/provider")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchData()
   }, [router])
 
@@ -74,71 +77,40 @@ export default function ProviderCertificates() {
 
   const fetchPatients = async () => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/providers/patients/assigned`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setPatients(data)
-      } else if (response.status === 401) {
+      const data = await getAssignedPatients()
+      setPatients(data)
+    } catch (error) {
+      if (error.status === 401) {
         handleUnauthorized()
       } else {
         toast({
           title: "Error",
-          description: "Failed to load patients",
+          description: error.message || "Failed to load patients",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error fetching patients:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load patients",
-        variant: "destructive",
-      })
     }
   }
 
   const fetchCertificates = async () => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/certificates/all`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setCertificates(data)
-      } else if (response.status === 401) {
+      const data = await getCertificates()
+      setCertificates(data)
+    } catch (error) {
+      if (error.status === 401) {
         handleUnauthorized()
       } else {
         toast({
           title: "Error",
-          description: "Failed to load certificates",
+          description: error.message || "Failed to load certificates",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error fetching certificates:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load certificates",
-        variant: "destructive",
-      })
     }
   }
 
   const handleUnauthorized = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
+    clearAuthSession()
     router.push("/auth/provider")
   }
 
@@ -168,11 +140,12 @@ export default function ProviderCertificates() {
       caseTreated: "",
       content: "",
       expiryDate: "",
-      signature: user.profile?.firstName && user.profile?.lastName 
-        ? `Dr. ${user.profile.firstName} ${user.profile.lastName}`
-        : "",
+      signature:
+        user.profile?.firstName && user.profile?.lastName
+          ? `Dr. ${user.profile.firstName} ${user.profile.lastName}`
+          : "",
       certificateNumber: `CERT-${Date.now()}`,
-      requestId: ""
+      requestId: "",
     })
     setModalMode("create")
     setIsModalOpen(true)
@@ -180,31 +153,15 @@ export default function ProviderCertificates() {
 
   const handleViewCertificate = async (certificate) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/certificates/${certificate.id}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const fullCertificate = await response.json()
-        setSelectedCertificate(fullCertificate)
-        setModalMode("view")
-        setIsModalOpen(true)
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to load certificate details",
-          variant: "destructive",
-        })
-      }
+      const fullCertificate = await getCertificateById(certificate.id)
+      setSelectedCertificate(fullCertificate)
+      setModalMode("view")
+      setIsModalOpen(true)
     } catch (error) {
       console.error("Error fetching certificate:", error)
       toast({
         title: "Error",
-        description: "Failed to load certificate details",
+        description: error.message || "Failed to load certificate details",
         variant: "destructive",
       })
     }
@@ -212,40 +169,25 @@ export default function ProviderCertificates() {
 
   const handlePrintCertificate = async (certificate) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/certificates/${certificate.id}/print`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      })
+      const blob = await printCertificate(certificate.id)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `certificate-${certificate.certificateNumber}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
 
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `certificate-${certificate.certificateNumber}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-        
-        toast({
-          title: "Success",
-          description: "Certificate downloaded successfully",
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to print certificate",
-          variant: "destructive",
-        })
-      }
+      toast({
+        title: "Success",
+        description: "Certificate downloaded successfully",
+      })
     } catch (error) {
       console.error("Error printing certificate:", error)
       toast({
         title: "Error",
-        description: "Failed to print certificate",
+        description: error.message || "Failed to print certificate",
         variant: "destructive",
       })
     }
@@ -264,8 +206,6 @@ export default function ProviderCertificates() {
     setIsSaving(true)
 
     try {
-      const token = localStorage.getItem("token")
-      
       const certificateData = {
         patientId: selectedPatient.id,
         requestId: formData.requestId || null,
@@ -275,38 +215,21 @@ export default function ProviderCertificates() {
         content: formData.content,
         expiryDate: formData.expiryDate || null,
         signature: formData.signature,
-        certificateNumber: formData.certificateNumber
+        certificateNumber: formData.certificateNumber,
       }
 
-      const response = await fetch(`${API_BASE_URL}/certificates`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(certificateData),
+      await createCertificate(certificateData)
+      toast({
+        title: "Success",
+        description: "Certificate created successfully",
       })
-
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Certificate created successfully",
-        })
-        setIsModalOpen(false)
-        fetchCertificates()
-      } else {
-        const errorData = await response.json().catch(() => null)
-        toast({
-          title: "Error",
-          description: errorData?.message || "Failed to create certificate",
-          variant: "destructive",
-        })
-      }
+      setIsModalOpen(false)
+      fetchCertificates()
     } catch (error) {
       console.error("Error creating certificate:", error)
       toast({
         title: "Error",
-        description: "Failed to create certificate",
+        description: error.message || "Failed to create certificate",
         variant: "destructive",
       })
     } finally {

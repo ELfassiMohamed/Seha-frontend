@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { useToast } from "@/hooks/use-toast"
 import { Bell, Check, Loader2 } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8081/api/notifications"
+import { getPatientNotifications } from "@/services/api/patientService"
+import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function PatientNotifications() {
   const { lang, setLang, t } = useLanguage()
@@ -20,72 +20,50 @@ export default function PatientNotifications() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/patient")
+    const result = resolveProtectedUser("patient")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/patient")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchNotifications()
   }, [router])
 
   const fetchNotifications = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(API_BASE_URL, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        // Transform backend data to frontend format
-        const transformedNotifications = data.map((notif) => ({
-          id: notif.requestId,
-          requestId: notif.requestId,
-          message: notif.message || notif.responseMessage || "New response received",
-          status: notif.status,
-          responseMessage: notif.responseMessage,
-          providerName: notif.providerName || notif.providerId || "Healthcare Provider",
-          date: notif.updatedAt || notif.createdAt || new Date().toISOString(),
-          read: false, // Backend doesn't track read status yet
-          type: notif.type,
-          subject: notif.subject,
-          priority: notif.priority,
-        }))
-        setNotifications(transformedNotifications)
-      } else if (response.status === 401) {
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
+      const data = await getPatientNotifications()
+      const transformedNotifications = data.map((notif) => ({
+        id: notif.requestId,
+        requestId: notif.requestId,
+        message: notif.message || notif.responseMessage || "New response received",
+        status: notif.status,
+        responseMessage: notif.responseMessage,
+        providerName: notif.providerName || notif.providerId || "Healthcare Provider",
+        date: notif.updatedAt || notif.createdAt || new Date().toISOString(),
+        read: false,
+        type: notif.type,
+        subject: notif.subject,
+        priority: notif.priority,
+      }))
+      setNotifications(transformedNotifications)
+    } catch (error) {
+      console.error("Fetch notifications error:", error)
+      if (error.status === 401) {
+        handleUnauthorized()
         router.push("/auth/patient")
       } else {
         toast({
           title: t.error || "Error",
-          description: t.failedToLoadNotifications || "Failed to load notifications",
+          description: error.message || t.failedToLoadNotifications || "Failed to load notifications",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Fetch notifications error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }

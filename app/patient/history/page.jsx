@@ -16,8 +16,8 @@ import { Label } from "@/components/ui/label"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { useToast } from "@/hooks/use-toast"
 import { FileText, Loader2, Eye, Calendar, User } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8081/api/patient"
+import { getPatientMedicalHistory } from "@/services/api/patientService"
+import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function MedicalHistory() {
   const { lang, setLang, t } = useLanguage()
@@ -30,58 +30,37 @@ export default function MedicalHistory() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/patient")
+    const result = resolveProtectedUser("patient")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/patient")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchMedicalHistory()
   }, [router])
 
   const fetchMedicalHistory = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/medical-history`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setRecords(data)
-      } else if (response.status === 401) {
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
+      const data = await getPatientMedicalHistory()
+      setRecords(data)
+    } catch (error) {
+      console.error("Fetch medical history error:", error)
+      if (error.status === 401) {
+        handleUnauthorized()
         router.push("/auth/patient")
       } else {
         toast({
           title: t.error || "Error",
-          description: t.failedToLoadHistory || "Failed to load medical history",
+          description: error.message || t.failedToLoadHistory || "Failed to load medical history",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Fetch medical history error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }

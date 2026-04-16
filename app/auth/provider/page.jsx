@@ -14,8 +14,8 @@ import { Logo } from "@/components/logo"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, Loader2 } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8082/api/auth"
+import { loginProvider } from "@/services/api/authService"
+import { setAuthSession } from "@/services/auth/storage"
 
 export default function ProviderAuthPage() {
   const { lang, setLang, t } = useLanguage()
@@ -34,43 +34,29 @@ export default function ProviderAuthPage() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(loginData),
-      })
+      const data = await loginProvider(loginData)
 
-      const data = await response.json()
-
-      if (response.ok) {
-        // Store token and user data
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("user", JSON.stringify({
+      setAuthSession({
+        token: data.token,
+        user: {
+          id: data.id,
           email: data.email,
           role: data.role,
-        }))
+          profile: data.profile,
+        },
+      })
 
-        toast({
-          title: t.success || "Success",
-          description: data.message || t.loginSuccessful || "Login successful",
-        })
+      toast({
+        title: t.success || "Success",
+        description: data.message || t.loginSuccessful || "Login successful",
+      })
 
-        // Redirect to provider dashboard
-        router.push("/provider/dashboard")
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: data.message || t.invalidCredentials || "Invalid credentials",
-          variant: "destructive",
-        })
-      }
+      router.push("/provider/dashboard")
     } catch (error) {
       console.error("Login error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
+        description: error.message || t.connectionError || "Connection error. Please try again.",
         variant: "destructive",
       })
     } finally {

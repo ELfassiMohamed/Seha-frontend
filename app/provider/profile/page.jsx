@@ -11,8 +11,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Loader2, AlertCircle, X } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8082/api/auth"
+import { getProviderProfile, updateProviderProfile } from "@/services/api/providerService"
+import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function ProviderProfile() {
   const { lang, setLang, t } = useLanguage()
@@ -31,60 +31,40 @@ export default function ProviderProfile() {
   const shouldComplete = searchParams.get("complete") === "true"
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/provider")
+    const result = resolveProtectedUser("provider")
+
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/provider")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchProfile()
   }, [router])
 
   const fetchProfile = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/profile`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setProfile(data)
-        setSubSpecialties(data.subSpecialties || [])
-        setStateLicenses(data.stateLicenses || [])
-      } else if (response.status === 401) {
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
+      const data = await getProviderProfile()
+      setProfile(data)
+      setSubSpecialties(data.subSpecialties || [])
+      setStateLicenses(data.stateLicenses || [])
+    } catch (error) {
+      console.error("Profile fetch error:", error)
+      if (error.status === 401) {
+        handleUnauthorized()
         router.push("/auth/provider")
       } else {
         toast({
           title: t.error || "Error",
-          description: t.failedToLoadProfile || "Failed to load profile",
+          description: error.message || t.failedToLoadProfile || "Failed to load profile",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Profile fetch error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }
@@ -107,40 +87,21 @@ export default function ProviderProfile() {
     }
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/complete-profile`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(profileData),
+      const data = await updateProviderProfile(profileData)
+      setProfile(data)
+      toast({
+        title: t.success || "Success",
+        description: t.profileUpdated || "Profile updated successfully",
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        setProfile(data)
-        toast({
-          title: t.success || "Success",
-          description: t.profileUpdated || "Profile updated successfully",
-        })
-        
-        if (shouldComplete) {
-          router.push("/provider/dashboard")
-        }
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: data.message || t.failedToUpdateProfile || "Failed to update profile",
-          variant: "destructive",
-        })
+      if (shouldComplete) {
+        router.push("/provider/dashboard")
       }
     } catch (error) {
       console.error("Profile update error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
+        description: error.message || t.connectionError || "Connection error. Please try again.",
         variant: "destructive",
       })
     } finally {

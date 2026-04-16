@@ -9,6 +9,7 @@ import { LanguageSelector } from "@/components/language-selector"
 import { Logo } from "@/components/logo"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { LayoutDashboard, Users, FileText, Award, User, LogOut, Menu, X, Stethoscope } from "lucide-react"
+import { clearAuthSession } from "@/services/auth/storage"
 
 export function ProviderSidebar({ user }) {
   const { lang, setLang, t } = useLanguage()
@@ -26,15 +27,7 @@ export function ProviderSidebar({ user }) {
   ]
 
   const handleLogout = () => {
-    // Clear localStorage (where JWT and user data are stored)
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    
-    // Also clear sessionStorage just in case
-    sessionStorage.removeItem("user")
-    sessionStorage.removeItem("token")
-    
-    // Redirect to home page
+    clearAuthSession()
     router.push("/")
   }
 

@@ -9,8 +9,13 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Award, Download, Eye, Loader2, Printer } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8080/api"
+import {
+  downloadCertificate,
+  getCertificateById,
+  getPatientCertificates,
+  getPatientProfile,
+} from "@/services/api/patientService"
+import { handleUnauthorized as clearUnauthorizedSession, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function PatientCertifications() {
   const [user, setUser] = useState(null)
@@ -22,124 +27,68 @@ export default function PatientCertifications() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/patient")
+    const result = resolveProtectedUser("patient")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/patient")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
-    fetchCertificates(parsedUser)
+
+    setUser(result.user)
+    fetchCertificates(result.user)
   }, [router])
 
   const fetchCertificates = async (userData) => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      
-      // Try to get patient ID from the profile endpoint first
-      const profileResponse = await fetch("http://localhost:8081/api/patient/profile", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      
-      let patientId = null
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json()
-        patientId = profileData.id
-      }
-      
-      // Fallback to userData if profile fetch fails
+      const profileData = await getPatientProfile()
+      let patientId = profileData?.id
+
       if (!patientId) {
         patientId = userData.id || userData.patientId || userData.email
       }
-      
+
       if (!patientId) {
         toast({
           title: "Error",
           description: "Unable to identify patient ID",
           variant: "destructive",
         })
-        setIsLoading(false)
         return
       }
-      
-      console.log("Fetching certificates for patient ID:", patientId)
-      
-      const response = await fetch(`${API_BASE_URL}/certificates/${patientId}/patient`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
 
-      if (response.ok) {
-        const data = await response.json()
-        setCertificates(data)
-      } else if (response.status === 401) {
-        handleUnauthorized()
+      const data = await getPatientCertificates(patientId)
+      setCertificates(data)
+    } catch (error) {
+      console.error("Error fetching certificates:", error)
+      if (error.status === 401) {
+        clearUnauthorizedSession()
+        router.push("/auth/patient")
       } else {
         toast({
           title: "Error",
-          description: "Failed to load certificates",
+          description: error.message || "Failed to load certificates",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error fetching certificates:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load certificates",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleUnauthorized = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    router.push("/auth/patient")
-  }
-
   const handleViewCertificate = async (certificate) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/certificates/${certificate.id}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const fullCertificate = await response.json()
-        setSelectedCertificate(fullCertificate)
-        setIsModalOpen(true)
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to load certificate details",
-          variant: "destructive",
-        })
-      }
+      const fullCertificate = await getCertificateById(certificate.id)
+      setSelectedCertificate(fullCertificate)
+      setIsModalOpen(true)
     } catch (error) {
       console.error("Error fetching certificate:", error)
       toast({
         title: "Error",
-        description: "Failed to load certificate details",
+        description: error.message || "Failed to load certificate details",
         variant: "destructive",
       })
     }
@@ -147,40 +96,25 @@ export default function PatientCertifications() {
 
   const handlePrintCertificate = async (certificate) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/certificates/${certificate.id}/print`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      })
+      const blob = await downloadCertificate(certificate.id)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `certificate-${certificate.certificateNumber || certificate.id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
 
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `certificate-${certificate.certificateNumber || certificate.id}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-        
-        toast({
-          title: "Success",
-          description: "Certificate downloaded successfully",
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to download certificate",
-          variant: "destructive",
-        })
-      }
+      toast({
+        title: "Success",
+        description: "Certificate downloaded successfully",
+      })
     } catch (error) {
       console.error("Error downloading certificate:", error)
       toast({
         title: "Error",
-        description: "Failed to download certificate",
+        description: error.message || "Failed to download certificate",
         variant: "destructive",
       })
     }

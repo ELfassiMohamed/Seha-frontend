@@ -21,8 +21,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { FileText, MessageSquare, Loader2, Send } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8080/api/requests"
+import {
+  getProviderRequestById,
+  getProviderRequests,
+  respondToProviderRequest,
+  sendProviderRequestMessage,
+} from "@/services/api/providerService"
+import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function ProviderRequests() {
   const { lang, setLang, t } = useLanguage()
@@ -39,58 +44,37 @@ export default function ProviderRequests() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/provider")
+    const result = resolveProtectedUser("provider")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/provider")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchRequests()
   }, [router])
 
   const fetchRequests = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(API_BASE_URL, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setRequests(data)
-      } else if (response.status === 401) {
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
+      const data = await getProviderRequests()
+      setRequests(data)
+    } catch (error) {
+      console.error("Fetch requests error:", error)
+      if (error.status === 401) {
+        handleUnauthorized()
         router.push("/auth/provider")
       } else {
         toast({
           title: t.error || "Error",
-          description: t.failedToLoadRequests || "Failed to load requests",
+          description: error.message || t.failedToLoadRequests || "Failed to load requests",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Fetch requests error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }
@@ -98,30 +82,13 @@ export default function ProviderRequests() {
 
   const fetchRequestDetails = async (requestId) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/${requestId}`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setSelectedRequest(data)
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: "Failed to load request details",
-          variant: "destructive",
-        })
-      }
+      const data = await getProviderRequestById(requestId)
+      setSelectedRequest(data)
     } catch (error) {
       console.error("Fetch request details error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     }
@@ -144,36 +111,18 @@ export default function ProviderRequests() {
 
     setIsSending(true)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/${selectedRequest.requestId}/messages`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: newMessage }),
+      await sendProviderRequestMessage(selectedRequest.requestId, { content: newMessage })
+      toast({
+        title: t.success || "Success",
+        description: t.messageSent || "Message sent successfully",
       })
-
-      if (response.ok) {
-        toast({
-          title: t.success || "Success",
-          description: t.messageSent || "Message sent successfully",
-        })
-        setNewMessage("")
-        // Refresh request details to show new message
-        await fetchRequestDetails(selectedRequest.requestId)
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: "Failed to send message",
-          variant: "destructive",
-        })
-      }
+      setNewMessage("")
+      await fetchRequestDetails(selectedRequest.requestId)
     } catch (error) {
       console.error("Send message error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     } finally {
@@ -189,34 +138,12 @@ export default function ProviderRequests() {
     const responseMessage = formData.get("response")
 
     try {
-      const token = localStorage.getItem("token")
-      
-      // First, update the request status and add response message
-      const respondResponse = await fetch(`${API_BASE_URL}/${selectedRequest.requestId}/respond`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: "TRAITÉ",
-          responseMessage: responseMessage,
-        }),
+      await respondToProviderRequest(selectedRequest.requestId, {
+        status: "TRAITE",
+        responseMessage,
       })
 
-      if (!respondResponse.ok) {
-        throw new Error("Failed to update request status")
-      }
-
-      // Then, send the message to the conversation thread
-      await fetch(`${API_BASE_URL}/${selectedRequest.requestId}/messages`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: responseMessage }),
-      })
+      await sendProviderRequestMessage(selectedRequest.requestId, { content: responseMessage })
 
       // Handle certificate if needed
       if (generateCertificate) {
@@ -624,3 +551,4 @@ export default function ProviderRequests() {
     </div>
   )
 }
+

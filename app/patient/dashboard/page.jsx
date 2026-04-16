@@ -10,6 +10,7 @@ import { useLanguage } from "@/contexts/LanguageContext"
 import { mockRequests } from "@/lib/mock-data"
 import { AlertCircle, FileText, Bell, Calendar, Plus, Lock } from "lucide-react"
 import Link from "next/link"
+import { resolveProtectedUser } from "@/services/auth/guard"
 
 export default function PatientDashboard() {
   const { lang, setLang, t } = useLanguage()
@@ -18,25 +19,18 @@ export default function PatientDashboard() {
   const router = useRouter()
 
   useEffect(() => {
-    // Changed from sessionStorage to localStorage
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/patient")
+    const result = resolveProtectedUser("patient")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/patient")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    // Check if user role is patient
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
-    setAccountStatus(parsedUser.accountStatus)
+
+    setUser(result.user)
+    setAccountStatus(result.user.accountStatus)
   }, [router])
 
   if (!user) return null

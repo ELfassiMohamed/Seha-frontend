@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { AlertCircle, X, Loader2 } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8081/api/patient"
+import { getPatientProfile, updatePatientProfile } from "@/services/api/patientService"
+import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function PatientProfile() {
   const { lang, setLang, t } = useLanguage()
@@ -32,60 +32,40 @@ export default function PatientProfile() {
   const shouldComplete = searchParams.get("complete") === "true"
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/patient")
+    const result = resolveProtectedUser("patient")
+
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/patient")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchProfile()
   }, [router])
 
   const fetchProfile = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/profile`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setProfile(data)
-        setAllergies(data.allergies || [])
-        setChronicDiseases(data.chronicDiseases || [])
-      } else if (response.status === 401) {
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
+      const data = await getPatientProfile()
+      setProfile(data)
+      setAllergies(data.allergies || [])
+      setChronicDiseases(data.chronicDiseases || [])
+    } catch (error) {
+      console.error("Profile fetch error:", error)
+      if (error.status === 401) {
+        handleUnauthorized()
         router.push("/auth/patient")
       } else {
         toast({
           title: t.error || "Error",
-          description: t.failedToLoadProfile || "Failed to load profile",
+          description: error.message || t.failedToLoadProfile || "Failed to load profile",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Profile fetch error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }
@@ -114,40 +94,21 @@ export default function PatientProfile() {
     }
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/complete-profile`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(profileData),
+      const data = await updatePatientProfile(profileData)
+      setProfile(data)
+      toast({
+        title: t.success || "Success",
+        description: t.profileUpdated || "Profile updated successfully",
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        setProfile(data)
-        toast({
-          title: t.success || "Success",
-          description: t.profileUpdated || "Profile updated successfully",
-        })
-        
-        if (shouldComplete) {
-          router.push("/patient/dashboard")
-        }
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: data.message || t.failedToUpdateProfile || "Failed to update profile",
-          variant: "destructive",
-        })
+      if (shouldComplete) {
+        router.push("/patient/dashboard")
       }
     } catch (error) {
       console.error("Profile update error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
+        description: error.message || t.connectionError || "Connection error. Please try again.",
         variant: "destructive",
       })
     } finally {

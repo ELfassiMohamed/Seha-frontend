@@ -20,9 +20,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Plus, Filter, FileText, Loader2 } from "lucide-react"
-
-const API_POST_URL = "http://localhost:8081/api/requests"
-const API_GET_URL = "http://localhost:8080/api/requests"
+import {
+  createPatientRequest,
+  getPatientProfile,
+  getPatientRequestsByPatientId,
+} from "@/services/api/patientService"
+import { handleUnauthorized, resolveProtectedUser } from "@/services/auth/guard"
 
 export default function PatientRequests() {
   const { lang, setLang, t } = useLanguage()
@@ -36,116 +39,55 @@ export default function PatientRequests() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/patient")
+    const result = resolveProtectedUser("patient")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/patient")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    /*
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    */
-    if (parsedUser.role !== "ROLE_PATIENT" && parsedUser.role !== "patient") {
-      router.push("/")
-      return
-    }
-    setUser(parsedUser)
-    fetchRequests(parsedUser)
+
+    setUser(result.user)
+    fetchRequests()
   }, [router])
 
-  const fetchRequests = async (userData) => {
+  const fetchRequests = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      console.log("=== FETCH REQUESTS DEBUG ===")
-      console.log("Token:", token ? `${token.substring(0, 20)}...` : "NO TOKEN")
-      
-      // First, fetch patient profile to get patient ID
-      const profileResponse = await fetch("http://localhost:8081/api/patient/profile", {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      console.log("Profile response status:", profileResponse.status)
-
-      if (!profileResponse.ok) {
-        throw new Error("Failed to fetch profile")
-      }
-
-      const profileData = await profileResponse.json()
-      console.log("Profile data:", profileData)
-      
+      const profileData = await getPatientProfile()
       const patientId = profileData.id || profileData.patientId
-      console.log("Extracted patient ID:", patientId)
-      
+
       if (!patientId) {
-        console.error("Patient ID not found in profile:", profileData)
         toast({
           title: t.error || "Error",
           description: "Patient ID not found. Please try logging in again.",
           variant: "destructive",
         })
-        setIsLoading(false)
         return
       }
-      
-      // Fetch requests using patient ID
-      const requestUrl = `http://localhost:8080/api/requests/patient/${patientId}`
-      console.log("Fetching requests from:", requestUrl)
-      
-      const response = await fetch(requestUrl, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
 
-      console.log("Requests response status:", response.status)
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Requests data:", data)
-        setRequests(data)
-      } else if (response.status === 401) {
-        console.error("401 Unauthorized")
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
+      const data = await getPatientRequestsByPatientId(patientId)
+      setRequests(data)
+    } catch (error) {
+      console.error("Fetch requests error:", error)
+      if (error.status === 401) {
+        handleUnauthorized()
         router.push("/auth/patient")
-      } else if (response.status === 403) {
-        console.error("403 Forbidden - Token or permissions issue")
-        const errorText = await response.text()
-        console.error("Error response:", errorText)
+      } else if (error.status === 403) {
         toast({
           title: t.error || "Error",
           description: "Access denied. Please check your permissions.",
           variant: "destructive",
         })
       } else {
-        const errorText = await response.text()
-        console.error("Error response:", errorText)
         toast({
           title: t.error || "Error",
-          description: t.failedToLoadRequests || "Failed to load requests",
+          description: error.message || t.failedToLoadRequests || "Failed to load requests",
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Fetch requests error:", error)
-      toast({
-        title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsLoading(false)
     }
@@ -166,47 +108,25 @@ export default function PatientRequests() {
     }
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(API_POST_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestData),
+      const data = await createPatientRequest(requestData)
+      setRequests([data, ...requests])
+
+      toast({
+        title: t.success || "Success",
+        description: data.message || t.requestSubmitted || "Request submitted successfully",
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        
-        // Add the new request to the list
-        setRequests([data, ...requests])
-        
-        toast({
-          title: t.success || "Success",
-          description: data.message || t.requestSubmitted || "Request submitted successfully",
-        })
-        
-        setIsModalOpen(false)
-        e.target.reset()
-        
-        // Refresh the requests list
-        if (user) {
-          fetchRequests(user)
-        }
-      } else {
-        const error = await response.json()
-        toast({
-          title: t.error || "Error",
-          description: error.message || t.requestFailed || "Failed to submit request",
-          variant: "destructive",
-        })
+      setIsModalOpen(false)
+      e.target.reset()
+
+      if (user) {
+        fetchRequests()
       }
     } catch (error) {
       console.error("Submit request error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
+        description: error.message || t.connectionError || "Connection error. Please try again.",
         variant: "destructive",
       })
     } finally {

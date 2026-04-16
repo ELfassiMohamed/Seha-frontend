@@ -19,8 +19,16 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Users, UserMinus, UserPlus, Loader2, CheckCircle, XCircle } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8080/api/providers/patients"
+import {
+  activatePatient,
+  assignPatient,
+  getAllPatients,
+  getAssignedPatients,
+  getUnassignedPatients,
+  suspendPatient,
+  unassignPatient,
+} from "@/services/api/providerService"
+import { resolveProtectedUser } from "@/services/auth/guard"
 
 export default function ProviderPatients() {
   const { lang, setLang, t } = useLanguage()
@@ -35,51 +43,36 @@ export default function ProviderPatients() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/provider")
+    const result = resolveProtectedUser("provider")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/provider")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     fetchAllData()
   }, [router])
 
   const fetchAllData = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      
-      // Fetch all patients, assigned, and unassigned in parallel
-      const [allRes, assignedRes, unassignedRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/all`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/assigned`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/unassigned`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+      const [all, assigned, unassigned] = await Promise.all([
+        getAllPatients(),
+        getAssignedPatients(),
+        getUnassignedPatients(),
       ])
-
-      if (allRes.ok) setAllPatients(await allRes.json())
-      if (assignedRes.ok) setAssignedPatients(await assignedRes.json())
-      if (unassignedRes.ok) setUnassignedPatients(await unassignedRes.json())
+      setAllPatients(all)
+      setAssignedPatients(assigned)
+      setUnassignedPatients(unassigned)
     } catch (error) {
       console.error("Fetch error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Failed to load patients",
+        description: error.message || t.connectionError || "Failed to load patients",
         variant: "destructive",
       })
     } finally {
@@ -90,34 +83,17 @@ export default function ProviderPatients() {
   const handleAssign = async (patientId) => {
     setActionLoading(patientId)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/${patientId}/assign`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      await assignPatient(patientId)
+      toast({
+        title: t.success || "Success",
+        description: t.patientAssignedSuccess || "Patient assigned successfully",
       })
-
-      if (response.ok) {
-        toast({
-          title: t.success || "Success",
-          description: t.patientAssignedSuccess || "Patient assigned successfully",
-        })
-        await fetchAllData()
-      } else {
-        const data = await response.json()
-        toast({
-          title: t.error || "Error",
-          description: data.message || "Failed to assign patient",
-          variant: "destructive",
-        })
-      }
+      await fetchAllData()
     } catch (error) {
       console.error("Assign error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     } finally {
@@ -128,33 +104,17 @@ export default function ProviderPatients() {
   const handleUnassign = async (patientId) => {
     setActionLoading(patientId)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/${patientId}/assign`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      await unassignPatient(patientId)
+      toast({
+        title: t.success || "Success",
+        description: t.patientUnassignedSuccess || "Patient unassigned successfully",
       })
-
-      if (response.ok) {
-        toast({
-          title: t.success || "Success",
-          description: t.patientUnassignedSuccess || "Patient unassigned successfully",
-        })
-        await fetchAllData()
-      } else {
-        const data = await response.json()
-        toast({
-          title: t.error || "Error",
-          description: data.message || "Failed to unassign patient",
-          variant: "destructive",
-        })
-      }
+      await fetchAllData()
     } catch (error) {
       console.error("Unassign error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     } finally {
@@ -165,33 +125,17 @@ export default function ProviderPatients() {
   const handleActivate = async (patientId) => {
     setActionLoading(patientId)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/${patientId}/activate`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      await activatePatient(patientId)
+      toast({
+        title: t.success || "Success",
+        description: t.patientActivatedSuccess || "Patient activated successfully",
       })
-
-      if (response.ok) {
-        toast({
-          title: t.success || "Success",
-          description: t.patientActivatedSuccess || "Patient activated successfully",
-        })
-        await fetchAllData()
-      } else {
-        const data = await response.json()
-        toast({
-          title: t.error || "Error",
-          description: data.message || "Failed to activate patient",
-          variant: "destructive",
-        })
-      }
+      await fetchAllData()
     } catch (error) {
       console.error("Activate error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error",
+        description: error.message || t.connectionError || "Connection error",
         variant: "destructive",
       })
     } finally {
@@ -202,35 +146,19 @@ export default function ProviderPatients() {
   const handleSuspend = async (patientId) => {
     setActionLoading(patientId)
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/${patientId}/suspend`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json", // Crucial for @RequestBody
-        },
-        // Send the payload the backend expects
-        body: JSON.stringify({ reason: "Suspended by provider" }), 
+      await suspendPatient(patientId)
+      toast({
+        title: t.success || "Success",
+        description: t.patientSuspendedSuccess || "Patient suspended successfully",
       })
-  
-      if (response.ok) {
-        const data = await response.json() // Now this will be valid JSON
-        toast({
-          title: t.success || "Success",
-          description: t.patientSuspendedSuccess || "Patient suspended successfully",
-        })
-        await fetchAllData()
-      } else {
-        // Handle the 400 error gracefully
-        const errorData = await response.json().catch(() => ({ message: "Server error" }))
-        toast({
-          title: t.error || "Error",
-          description: errorData.message || "Failed to suspend patient",
-          variant: "destructive",
-        })
-      }
+      await fetchAllData()
     } catch (error) {
       console.error("Suspend error:", error)
+      toast({
+        title: t.error || "Error",
+        description: error.message || "Failed to suspend patient",
+        variant: "destructive",
+      })
     } finally {
       setActionLoading(null)
       setSuspendDialog({ open: false, patient: null })

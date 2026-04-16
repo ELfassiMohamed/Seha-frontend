@@ -13,9 +13,9 @@ import { LanguageSelector } from "@/components/language-selector"
 import { Logo } from "@/components/logo"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft } from "lucide-react"
-
-const API_BASE_URL = "http://localhost:8081/api/auth"
+import { ArrowLeft, Loader2 } from "lucide-react"
+import { loginPatient, registerPatient } from "@/services/api/authService"
+import { setAuthSession } from "@/services/auth/storage"
 
 export default function PatientAuthPage() {
   const { lang, setLang, t, mounted } = useLanguage()
@@ -36,48 +36,34 @@ export default function PatientAuthPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          email: loginEmail, 
-          password: loginPassword 
-        }),
+      const data = await loginPatient({
+        email: loginEmail,
+        password: loginPassword,
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        // Store authentication data
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("user", JSON.stringify({
+      setAuthSession({
+        token: data.token,
+        user: {
+          id: data.id,
           email: data.email,
           role: data.role,
           accountStatus: data.accountStatus,
-          canAccessMedicalHistory: data.canAccessMedicalHistory
-        }))
+          canAccessMedicalHistory: data.canAccessMedicalHistory,
+          profile: data.profile,
+        },
+      })
 
-        toast({
-          title: t.success || "Success",
-          description: t.loginSuccess || "Login successful",
-        })
+      toast({
+        title: t.success || "Success",
+        description: t.loginSuccess || "Login successful",
+      })
 
-        // Redirect to dashboard
-        router.push("/patient/dashboard")
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: data.message || t.invalidCredentials || "Invalid credentials",
-          variant: "destructive",
-        })
-      }
+      router.push("/patient/dashboard")
     } catch (error) {
       console.error("Login error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
+        description: error.message || t.connectionError || "Connection error. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -90,49 +76,35 @@ export default function PatientAuthPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          email: registerEmail, 
-          password: registerPassword 
-        }),
+      const data = await registerPatient({
+        email: registerEmail,
+        password: registerPassword,
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        // Store authentication data
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("user", JSON.stringify({
+      setAuthSession({
+        token: data.token,
+        user: {
+          id: data.id,
           email: data.email,
           role: data.role,
           accountStatus: data.accountStatus,
           canAccessMedicalHistory: data.canAccessMedicalHistory,
-          isNewUser: true // Flag to indicate this is a new registration
-        }))
+          profile: data.profile,
+          isNewUser: true,
+        },
+      })
 
-        toast({
-          title: t.success || "Success",
-          description: data.message || t.accountCreated || "Account created successfully",
-        })
+      toast({
+        title: t.success || "Success",
+        description: data.message || t.accountCreated || "Account created successfully",
+      })
 
-        // Redirect to profile completion page
-        router.push("/patient/profile?complete=true")
-      } else {
-        toast({
-          title: t.error || "Error",
-          description: data.message || t.registrationFailed || "Registration failed",
-          variant: "destructive",
-        })
-      }
+      router.push("/patient/profile?complete=true")
     } catch (error) {
       console.error("Registration error:", error)
       toast({
         title: t.error || "Error",
-        description: t.connectionError || "Connection error. Please try again.",
+        description: error.message || t.connectionError || "Connection error. Please try again.",
         variant: "destructive",
       })
     } finally {

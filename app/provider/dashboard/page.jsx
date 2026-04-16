@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { mockRequests, mockUsers } from "@/lib/mock-data"
 import { Users, FileText, CheckCircle, Award, AlertCircle, Loader2 } from "lucide-react"
+import { resolveProtectedUser } from "@/services/auth/guard"
 
 export default function ProviderDashboard() {
   const { lang, setLang, t } = useLanguage()
@@ -15,24 +16,17 @@ export default function ProviderDashboard() {
   const router = useRouter()
 
   useEffect(() => {
-    // Changed from sessionStorage to localStorage
-    const userData = localStorage.getItem("user")
-    const token = localStorage.getItem("token")
-    
-    if (!userData || !token) {
-      router.push("/auth/provider")
+    const result = resolveProtectedUser("provider")
+    if (!result.ok) {
+      if (result.reason === "unauthenticated") {
+        router.push("/auth/provider")
+      } else {
+        router.push("/")
+      }
       return
     }
-    
-    const parsedUser = JSON.parse(userData)
-    
-    // Check for both "PROVIDER" (from backend) and "provider" (legacy)
-    if (parsedUser.role !== "PROVIDER" && parsedUser.role !== "provider") {
-      router.push("/")
-      return
-    }
-    
-    setUser(parsedUser)
+
+    setUser(result.user)
     setIsLoading(false)
   }, [router])
 
