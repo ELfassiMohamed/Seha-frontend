@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLanguage } from "@/contexts/LanguageContext"
-import { Heart, Shield, UserCheck, ArrowRight, Github } from "lucide-react"
+import { Heart, Shield, UserCheck, ArrowRight, Github, Linkedin } from "lucide-react"
 
 const LocalLogo = ({ href }) => {
   const content = (
@@ -26,6 +26,13 @@ export default function LandingPage() {
   const { lang, setLang, t, mounted } = useLanguage()
   const isArabic = lang === "ar"
 
+  const team = [
+    { name: "Mohamed El Fassi", url: "https://www.linkedin.com/in/mohamed-el-fassi" },
+    { name: "Akram Benyacoub", url: "https://www.linkedin.com/in/akram-benyacoub-5a98a3279/" },
+    { name: "Amal Chegdali", url: "https://www.linkedin.com/in/amal-chegdali-37a5b9239/" },
+    { name: "Nizar Tlidi", url: "https://www.linkedin.com/in/nizartlidi/" },
+  ]
+
   const pageText = {
     en: {
       language: "Language",
@@ -36,6 +43,7 @@ export default function LandingPage() {
       mvpNotice: "MVP - Under Active Development",
       // attribution: "Project Group - EMSI Tanger",
       github: "GitHub",
+      builtBy: "Built by",
     },
     fr: {
       language: "Langue",
@@ -46,6 +54,7 @@ export default function LandingPage() {
       mvpNotice: "MVP - En Developpement Actif",
       // attribution: "Groupe de Projet - EMSI Tanger",
       github: "GitHub",
+      builtBy: "Concu par",
     },
     ar: {
       language: "اللغة",
@@ -56,6 +65,7 @@ export default function LandingPage() {
       mvpNotice: "MVP - المنصة قيد التطوير النشط",
       // attribution: "مجموعة مشروع - EMSI Tanger",
       github: "GitHub",
+      builtBy: "صُنع بواسطة",
     },
   }
 
@@ -207,13 +217,12 @@ export default function LandingPage() {
 
       <footer className="mt-10 border-t bg-muted/40 px-4 py-10">
         <div className="container mx-auto max-w-6xl">
-          <div className="rounded-2xl border bg-card p-5 md:p-6">
+          <div className="rounded-2xl border bg-card p-5 md:p-6 space-y-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-3">
                 <p className="inline-flex rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold tracking-wide text-secondary">
                   {current.mvpNotice}
                 </p>
-                {/* <p className="text-sm text-muted-foreground">{current.attribution}</p> */}
                 <a
                   href="https://github.com/ELfassiMohamed/Seha-frontend"
                   target="_blank"
@@ -228,6 +237,27 @@ export default function LandingPage() {
               <div className={`space-y-2 ${isArabic ? "md:text-left" : "md:text-right"}`}>
                 <LocalLogo href="/" />
                 <p className="text-sm text-muted-foreground">{t.copyright}</p>
+              </div>
+            </div>
+
+            {/* Team LinkedIn Section */}
+            <div className="border-t pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {current.builtBy}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {team.map((member) => (
+                  <a
+                    key={member.url}
+                    href={member.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-all hover:border-primary hover:bg-primary/5 hover:text-primary"
+                  >
+                    <Linkedin className="h-3.5 w-3.5 text-[#0A66C2]" />
+                    {member.name}
+                  </a>
+                ))}
               </div>
             </div>
           </div>
